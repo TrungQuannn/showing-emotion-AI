@@ -127,3 +127,65 @@ st.subheader("📂 Dữ liệu huấn luyện hiện tại:")
 st.dataframe(df.tail(10))
 
 st.caption("💡 Hãy thử nhập: 'Tôi vui quá' (positive), 'Tôi chán lắm' (negative), hoặc 'Tôi đang học' (neutral).")
+
+
+# -----------------------------
+# 💬 BẢNG THỐNG KÊ CẢM XÚC (EMOTION BOARD) - LOGIC ĐÃ ĐƯỢC TINH CHỈNH
+# -----------------------------
+st.write("---")
+st.subheader("📊 Bảng cảm xúc hiện tại")
+
+# Nếu chưa có dữ liệu
+if df.empty or df.shape[0] == 0:
+    st.write("😶‍🌫️ Ờm... lịch sử chưa có từ mới.")
+else:
+    counts = df["label"].value_counts()
+    pos = int(counts.get("positive", 0))
+    neg = int(counts.get("negative", 0))
+    neu = int(counts.get("neutral", 0))
+    total = pos + neg + neu
+
+    # Tỉ lệ phần trăm
+    pos_pct = pos / total * 100 if total > 0 else 0.0
+    neg_pct = neg / total * 100 if total > 0 else 0.0
+    neu_pct = neu / total * 100 if total > 0 else 0.0
+
+    # Hiển thị biểu đồ thanh (dùng phần trăm cho trực quan)
+    chart_data = pd.Series({"positive": pos_pct, "negative": neg_pct, "neutral": neu_pct})
+    st.bar_chart(chart_data)
+
+    # ---------- Quy tắc quyết định thông điệp ----------
+    # 1) Ba bằng nhau
+    if pos == neg == neu:
+        emoji = "🤯"
+        message = "Ba cảm xúc cân bằng hoàn hảo — đúng kiểu ‘thiền sư’ rồi đó!"
+    else:
+        # 2) Hai cái bằng nhau và LỚN HƠN cái còn lại (chỉ hiển thị khi đúng điều kiện này)
+        if pos == neg and pos > neu:
+            emoji = "⚖️"
+            message = "Tích cực = Tiêu cực và đều nhiều hơn trung hòa — trái tim bạn nhiều chiều lắm."
+        elif pos == neu and pos > neg:
+            emoji = "🙂"
+            message = "Tích cực = Trung hòa và đều nhiều hơn tiêu cực — sống cân bằng đó!"
+        elif neg == neu and neg > pos:
+            emoji = "😔"
+            message = "Tiêu cực = Trung hòa và đều nhiều hơn tích cực — hơi buồn đấy."
+        else:
+            # 3) Một cái LỚN HƠN (dominant)
+            if pos > neg and pos > neu:
+                emoji = "😄"
+                message = "Bạn tích cực ghê đó! Toàn năng lượng tốt."
+            elif neg > pos and neg > neu:
+                emoji = "😞"
+                message = "Bạn hơi ủ rũ đấy, nghỉ ngơi chút nha."
+            elif neu > pos and neu > neg:
+                emoji = "😐"
+                message = "Trung hòa - Cầu Giấy vibes luôn."
+            else:
+                # 4) Các trường hợp còn lại (ví dụ: hai bằng nhau nhưng KHÔNG lớn hơn cái còn lại
+                # — trong logic trên, nếu hai bằng nhau nhưng không lớn hơn, thì cái thứ ba sẽ là lớn nhất và đã bị xử lý.
+                emoji = "🤷"
+                message = "Cảm xúc hơi lộn xộn — không xác định rõ."
+    # ---------- Hiển thị kết quả ----------
+    st.markdown(f"**Tỉ lệ:** Positive {pos_pct:.1f}%  •  Negative {neg_pct:.1f}%  •  Neutral {neu_pct:.1f}%")
+    st.markdown(f"{emoji}  {message}")
