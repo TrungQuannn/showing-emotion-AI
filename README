@@ -1,0 +1,285 @@
+ Giới thiệu về code
+1️⃣ Ý tưởng
+
+Mục tiêu của dự án là xây dựng một AI có khả năng hiểu và học cảm xúc tiếng Việt, cụ thể:
+
+Nhận diện câu mang cảm xúc tích cực (positive), tiêu cực (negative) hoặc trung tính (neutral).
+
+Có khả năng tự học — người dùng có thể dạy trực tiếp cho AI khi gặp từ/câu chưa biết.
+
+👉 Nói cách khác, đây là một hệ thống AI “tự học cảm xúc”, vừa phân tích được cảm xúc, vừa tiếp thu thêm kiến thức mới mà người dùng gán nhãn cho.
+---
+2️⃣ Cài đặt môi trường
+a. Yêu cầu ban đầu
+
+Python >= 3.9
+
+Pip (trình quản lý gói của Python)
+
+Hệ điều hành: Windows / macOS / Linux
+
+b. Cài đặt môi trường ảo (khuyên dùng)
+
+Windows:
+
+python -m venv venv
+venv\Scripts\activate
+
+
+macOS / Linux:
+
+python3 -m venv venv
+source venv/bin/activate
+
+c. Cài đặt thư viện cần thiết
+pip install pandas scikit-learn matplotlib seaborn underthesea streamlit joblib
+3/ Xử lí code:
+
+a/ train_sentiment.py: code hình thành model cơ bản
+Chức năng:
+
+Tạo bộ dữ liệu mẫu ban đầu.
+Tokenize (xử lý từ vựng tiếng Việt).
+Huấn luyện mô hình Logistic Regression để phân loại cảm xúc.
+Đánh giá độ chính xác, hiển thị confusion matrix.
+Lưu mô hình đã huấn luyện thành tệp .pkl.
+Sau khi chạy file này, bạn sẽ có 2 tệp:
+sentiment_model.pkl và vectorizer.pkl
+
+
+CODE:
+
+import pandas as pd
+from underthesea import word_tokenize
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+import pickle
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# ====== 1. Dữ liệu mẫu ======
+data = {
+    "text": [
+        "Hôm nay tôi rất vui",
+        "Trời đẹp quá, tôi cảm thấy hạnh phúc",
+        "Tôi ghét phải chờ đợi",
+        "Thật tệ, tôi mệt và buồn",
+        "Thành công rồi! Tuyệt vời quá",
+        "Tôi thấy chán và thất vọng",
+        "Cảm ơn bạn, tôi rất hài lòng",
+        "Dịch vụ quá tệ, không đáng tiền",
+        "Cái bàn này màu xanh",
+        "Tôi đang ngồi học",
+        "Chúng sinh đau buồn",
+        "Cả lớp cùng cười vui vẻ"
+    ],
+    "label": [
+        "positive", "positive", "negative", "negative",
+        "positive", "negative", "positive", "negative",
+        "neutral", "neutral", "negative", "positive"
+    ]
+}
+
+df = pd.DataFrame(data)
+
+# ====== 2. Tiền xử lý ======
+df["text"] = df["text"].apply(lambda x: word_tokenize(x, format="text"))
+
+X_train, X_test, y_train, y_test = train_test_split(df["text"], df["label"], test_size=0.25, random_state=42)
+
+vectorizer = CountVectorizer()
+X_train_vec = vectorizer.fit_transform(X_train)
+X_test_vec = vectorizer.transform(X_test)
+
+# ====== 3. Huấn luyện ======
+model = LogisticRegression(max_iter=200)
+model.fit(X_train_vec, y_train)
+
+# ====== 4. Đánh giá ======
+y_pred = model.predict(X_test_vec)
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print(classification_report(y_test, y_pred))
+
+# Vẽ confusion matrix
+cm = confusion_matrix(y_test, y_pred, labels=["positive", "negative", "neutral"])
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+            xticklabels=["positive", "negative", "neutral"],
+            yticklabels=["positive", "negative", "neutral"])
+plt.title("Confusion Matrix - 3 Cảm Xúc")
+plt.show()
+
+# ====== 5. Lưu model ======
+with open("sentiment_model.pkl", "wb") as f:
+    pickle.dump((model, vectorizer), f)
+print("✅ Đã lưu model sentiment_model.pkl (3 cảm xúc)")
+
+
+
+b/ app_sentiment.py: giao diện
+Nhập câu để AI dự đoán cảm xúc
+Nếu AI “chưa hiểu” câu đó, người dùng có thể gán nhãn cảm xúc cho câu đó và lưu lại.
+Nhấn nút “Huấn luyện lại mô hình” để AI học từ dữ liệu mới.
+Xem bảng dữ liệu huấn luyện hiện có.
+
+CODE:
+
+import streamlit as st
+import pandas as pd
+import joblib
+import pickle
+from underthesea import word_tokenize
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
+
+# -----------------------------
+# 🔧 Cấu hình file dữ liệu
+# -----------------------------
+DATA_FILE = "sentiment_data.csv"
+MODEL_FILE = "sentiment_model.pkl"
+VECTORIZER_FILE = "vectorizer.pkl"
+
+# -----------------------------
+# 📦 Load hoặc tạo mới dữ liệu
+# -----------------------------
+def load_data():
+    try:
+        df = pd.read_csv(DATA_FILE)
+    except FileNotFoundError:
+        df = pd.DataFrame({"text": [], "label": []})
+        df.to_csv(DATA_FILE, index=False)
+    return df
+
+# -----------------------------
+# 🧠 Load hoặc tạo mới mô hình
+# -----------------------------
+def load_model():
+    try:
+        with open(MODEL_FILE, "rb") as f:
+            obj = pickle.load(f)
+            if isinstance(obj, tuple) and len(obj) == 2:
+                model, vectorizer = obj
+            else:
+                model = joblib.load(MODEL_FILE)
+                vectorizer = joblib.load(VECTORIZER_FILE)
+    except:
+        df = load_data()
+        if len(df) > 0:
+            vectorizer = CountVectorizer()
+            X = vectorizer.fit_transform(df["text"])
+            y = df["label"]
+            model = MultinomialNB()
+            model.fit(X, y)
+            with open(MODEL_FILE, "wb") as f:
+                pickle.dump((model, vectorizer), f)
+        else:
+            vectorizer = CountVectorizer()
+            model = MultinomialNB()
+    return model, vectorizer
+
+# -----------------------------
+# 🚀 Giao diện Streamlit
+# -----------------------------
+st.set_page_config(page_title="Sentiment Trainer 🇻🇳", page_icon="💬", layout="centered")
+st.title("🇻🇳 AI Phân Loại Cảm Xúc Tiếng Việt 😄😞😐")
+st.write("AI sẽ học cảm xúc tiếng Việt từ chính bạn — dạy nó thêm khi nó chưa biết nhé!")
+
+# Load dữ liệu & mô hình
+df = load_data()
+model, vectorizer = load_model()
+
+# -----------------------------
+# ✏️ Nhập câu cần phân tích
+# -----------------------------
+user_text = st.text_input("Nhập câu hoặc từ tiếng Việt:")
+
+if user_text:
+    processed = word_tokenize(user_text, format="text")
+
+    # Kiểm tra xem có từ nào chưa học không
+    unknown_words = [w for w in processed.split() if w not in vectorizer.vocabulary_]
+
+    if len(unknown_words) > 0:
+        st.warning(f"🤔 Tôi chưa học qua {len(unknown_words)} từ: {', '.join(unknown_words)}.")
+        st.info("Bạn có muốn dạy tôi biết cảm xúc của từ/câu này không?")
+
+        label = st.radio("Gán nhãn cảm xúc:", ["positive", "negative", "neutral"], horizontal=True)
+        if st.button("💾 Lưu từ mới"):
+            new_row = pd.DataFrame([[processed, label]], columns=["text", "label"])
+            df = pd.concat([df, new_row], ignore_index=True)
+            df.to_csv(DATA_FILE, index=False)
+            st.success(f"✅ Đã lưu từ mới: '{user_text}' → {label}.")
+            st.balloons()
+            st.info("💡 Tôi sẽ biết nghĩa từ này sau khi bạn bấm 'Huấn luyện lại mô hình'.")
+    else:
+        # Nếu tất cả từ đã học, thì dự đoán cảm xúc
+        try:
+            X_input = vectorizer.transform([processed])
+            pred = model.predict(X_input)[0]
+            if pred == "positive":
+                emoji = "😊"
+            elif pred == "negative":
+                emoji = "😞"
+            else:
+                emoji = "😐"
+            st.subheader(f"🔍 Kết quả dự đoán: **{pred.upper()}** {emoji}")
+        except Exception:
+            st.warning("⚠️ Mô hình chưa đủ dữ liệu. Hãy thêm ví dụ và huấn luyện lại.")
+
+# -----------------------------
+# 🔁 Huấn luyện lại mô hình
+# -----------------------------
+st.write("---")
+if st.button("🔁 Huấn luyện lại mô hình"):
+    df = load_data()
+    if len(df) < 3:
+        st.warning("⚠️ Cần ít nhất 3 mẫu để huấn luyện.")
+    else:
+        vectorizer = CountVectorizer()
+        X = vectorizer.fit_transform(df["text"])
+        y = df["label"]
+        model = MultinomialNB()
+        model.fit(X, y)
+        with open(MODEL_FILE, "wb") as f:
+            pickle.dump((model, vectorizer), f)
+        joblib.dump(vectorizer, VECTORIZER_FILE)
+        st.success("✅ À, tôi biết nghĩa của các từ mới rồi! Cảm ơn bạn đã dạy tôi ❤️")
+
+# -----------------------------
+# 📊 Hiển thị dữ liệu hiện có
+# -----------------------------
+st.write("---")
+st.subheader("📂 Dữ liệu huấn luyện hiện tại:")
+st.dataframe(df.tail(10))
+
+st.caption("💡 Hãy thử nhập: 'Tôi vui quá' (positive), 'Tôi chán lắm' (negative), hoặc 'Tôi đang học' (neutral).")
+
+
+Kết quả thêmL có 2 file. csv được đạo
+
+
+4/ Chạy và kiểm thử
+
+bước 1: Huấn luyện ban đầu:
+python train_sentiment.py (chạy ở bash terminal)
+==> nó sẽ ra 1 file "Sentiment_model.pkl", "vectorizer.pkl", kèm với 1 biểu đồ ban đầu cho mô hình có sẵn
+
+bước 2: chạy web:
+ở đây, các bạn có 2 cách chạy:
++ chạy trong vscode: Nhấn run và nó ra một textbox nhỏ để làm việc
+(tương tự như cái bảng sudoku ở topic Optimization)
++ chạy web: Vào bash terminal, gõ:
+
+"streamlit run app_sentiment.py" ==> giao diện streamlit
+lúc này, nó sẽ ra link localhost, nhấn vào và thử nghiệm
+
+5/ cách sử dụng trong giao diện: Nó sẽ kiểm thử text bạn nhập: 
++ positive/ negative/neutral: nó là thế đấy
++ bảo rằng không biết từ này:
+chưa có trong model, và cần bạn train
+
+Cách train: dán nhán từ đó => lưu => chạy lại mô hình
+
+
+
